@@ -10,7 +10,7 @@ import (
 func mockRSSFeed() string {
 	today := time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 MST")
 	yesterday := time.Now().UTC().AddDate(0, 0, -1).Format("Mon, 02 Jan 2006 15:04:05 MST")
-	
+
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
 <channel>
@@ -41,19 +41,19 @@ func mockRSSFeed() string {
 
 func TestGetTodaysPosts(t *testing.T) {
 	reader := NewChangelogReader()
-	
+
 	// Test with mock RSS feed using the new method
 	mockFeedXML := mockRSSFeed()
 	todaysPosts, err := reader.GetTodaysPostsFromString(mockFeedXML)
 	if err != nil {
 		t.Fatalf("Failed to get today's posts: %v", err)
 	}
-	
+
 	// Should have 2 posts from today
 	if len(todaysPosts) != 2 {
 		t.Errorf("Expected 2 posts from today, got %d", len(todaysPosts))
 	}
-	
+
 	// Check that both posts are from today
 	for _, post := range todaysPosts {
 		if !strings.Contains(post.Title, "Today") {
@@ -66,18 +66,18 @@ func TestGetTodaysPostsWithURL(t *testing.T) {
 	// This test would require internet access, so we'll use a mock server
 	// For now, we'll test the parsing logic with a string
 	reader := NewChangelogReader()
-	
+
 	mockFeedXML := mockRSSFeed()
 	feed, err := reader.parser.ParseString(mockFeedXML)
 	if err != nil {
 		t.Fatalf("Failed to parse mock RSS feed: %v", err)
 	}
-	
+
 	// Verify we can parse the feed structure correctly
 	if len(feed.Items) != 3 {
 		t.Errorf("Expected 3 items in feed, got %d", len(feed.Items))
 	}
-	
+
 	if feed.Title != "GitHub Changelog - Copilot" {
 		t.Errorf("Expected feed title 'GitHub Changelog - Copilot', got: %s", feed.Title)
 	}
@@ -85,11 +85,11 @@ func TestGetTodaysPostsWithURL(t *testing.T) {
 
 func TestNewChangelogReader(t *testing.T) {
 	reader := NewChangelogReader()
-	
+
 	if reader == nil {
 		t.Error("NewChangelogReader() returned nil")
 	}
-	
+
 	if reader.parser == nil {
 		t.Error("Parser not initialized in ChangelogReader")
 	}
@@ -97,7 +97,7 @@ func TestNewChangelogReader(t *testing.T) {
 
 func TestGetTodaysPostsFromStringError(t *testing.T) {
 	reader := NewChangelogReader()
-	
+
 	// Test with invalid XML
 	_, err := reader.GetTodaysPostsFromString("invalid xml")
 	if err == nil {
@@ -107,7 +107,7 @@ func TestGetTodaysPostsFromStringError(t *testing.T) {
 
 func TestFilterTodaysPostsEmptyFeed(t *testing.T) {
 	reader := NewChangelogReader()
-	
+
 	// Test with empty RSS feed
 	emptyFeedXML := `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -117,13 +117,80 @@ func TestFilterTodaysPostsEmptyFeed(t *testing.T) {
 <link>https://example.com/</link>
 </channel>
 </rss>`
-	
+
 	todaysPosts, err := reader.GetTodaysPostsFromString(emptyFeedXML)
 	if err != nil {
 		t.Fatalf("Failed to parse empty feed: %v", err)
 	}
-	
+
 	if len(todaysPosts) != 0 {
 		t.Errorf("Expected 0 posts from empty feed, got %d", len(todaysPosts))
+	}
+}
+
+func TestFilterTodaysPostsWithDifferentTimes(t *testing.T) {
+	reader := NewChangelogReader()
+
+	// Create RSS feed with posts at different times of today
+	today := time.Now().UTC()
+	earlyToday := time.Date(today.Year(), today.Month(), today.Day(), 1, 30, 0, 0, time.UTC)
+	lateToday := time.Date(today.Year(), today.Month(), today.Day(), 23, 59, 59, 0, time.UTC)
+
+	feedXML := `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+<title>Test Feed</title>
+<description>Test feed with different times</description>
+<link>https://example.com/</link>
+<item>
+<title>Early Today Post</title>
+<link>https://example.com/early</link>
+<description>Posted early today</description>
+<pubDate>` + earlyToday.Format("Mon, 02 Jan 2006 15:04:05 MST") + `</pubDate>
+</item>
+<item>
+<title>Late Today Post</title>
+<link>https://example.com/late</link>
+<description>Posted late today</description>
+<pubDate>` + lateToday.Format("Mon, 02 Jan 2006 15:04:05 MST") + `</pubDate>
+</item>
+</channel>
+</rss>`
+
+	todaysPosts, err := reader.GetTodaysPostsFromString(feedXML)
+	if err != nil {
+		t.Fatalf("Failed to parse test feed: %v", err)
+	}
+
+	// Should find both posts from today regardless of time
+	if len(todaysPosts) != 2 {
+		t.Errorf("Expected 2 posts from today, got %d", len(todaysPosts))
+	}
+}
+
+func TestIntegrationWithFixedLogic(t *testing.T) {
+	reader := NewChangelogReader()
+
+	// Test with the mock RSS feed to verify fixed filtering logic works end-to-end
+	mockFeedXML := mockRSSFeed()
+	todaysPosts, err := reader.GetTodaysPostsFromString(mockFeedXML)
+	if err != nil {
+		t.Fatalf("Failed to get today's posts: %v", err)
+	}
+
+	// Should have 2 posts from today as per mockRSSFeed
+	if len(todaysPosts) != 2 {
+		t.Errorf("Expected 2 posts from today, got %d", len(todaysPosts))
+	}
+
+	// Verify posts are actually from today
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	for _, post := range todaysPosts {
+		if post.PublishedParsed != nil {
+			publishedDate := post.PublishedParsed.UTC().Truncate(24 * time.Hour)
+			if !publishedDate.Equal(today) {
+				t.Errorf("Post %s is not from today: %v vs %v", post.Title, publishedDate, today)
+			}
+		}
 	}
 }

@@ -48,13 +48,12 @@ func (cr *ChangelogReader) GetTodaysPostsFromString(feedXML string) ([]*gofeed.I
 // filterTodaysPosts filters feed items to return only today's posts
 func (cr *ChangelogReader) filterTodaysPosts(feed *gofeed.Feed) []*gofeed.Item {
 	today := time.Now().UTC().Truncate(24 * time.Hour)
-	tomorrow := today.Add(24 * time.Hour)
 
 	var todaysPosts []*gofeed.Item
 	for _, item := range feed.Items {
 		if item.PublishedParsed != nil {
 			publishedDate := item.PublishedParsed.UTC().Truncate(24 * time.Hour)
-			if publishedDate.Equal(today) || (publishedDate.After(today) && publishedDate.Before(tomorrow)) {
+			if publishedDate.Equal(today) {
 				todaysPosts = append(todaysPosts, item)
 			}
 		}
@@ -65,14 +64,14 @@ func (cr *ChangelogReader) filterTodaysPosts(feed *gofeed.Feed) []*gofeed.Item {
 
 func main() {
 	reader := NewChangelogReader()
-	
+
 	posts, err := reader.GetTodaysPosts(GitHubCopilotChangelogURL)
 	if err != nil {
 		log.Fatalf("Error reading RSS feed: %v", err)
 	}
 
 	fmt.Printf("Found %d posts published today:\n\n", len(posts))
-	
+
 	for i, post := range posts {
 		fmt.Printf("%d. %s\n", i+1, post.Title)
 		fmt.Printf("   Published: %s\n", post.PublishedParsed.Format("2006-01-02 15:04:05 UTC"))
